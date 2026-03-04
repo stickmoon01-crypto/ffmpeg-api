@@ -1,56 +1,20 @@
-#####################################################################
-#
-# A Docker image to convert audio and video for web using web API
-#
-#   with
-#     - FFMPEG (built)
-#     - NodeJS
-#     - fluent-ffmpeg
-#
-#   For more on Fluent-FFMPEG, see 
-#
-#            https://github.com/fluent-ffmpeg/node-fluent-ffmpeg
-#
-# Original image and FFMPEG API by Paul Visco
-# https://github.com/surebert/docker-ffmpeg-service
-#
-#####################################################################
+FROM python:3.12-slim
 
-FROM node:18.19.0-alpine3.19 as build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libass9 fontconfig libfreetype6 \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN apk add --no-cache git
+COPY fonts /usr/share/fonts/custom
+RUN fc-cache -f -v
 
-# install pkg
-RUN npm install -g pkg
+WORKDIR /app
 
-ENV PKG_CACHE_PATH /usr/cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-WORKDIR /usr/src/app
+COPY . .
 
-# Bundle app source
-COPY ./src .
-RUN npm install
+EXPOSE 8000
 
-# Create single binary file
-RUN pkg --targets node12-alpine-x64 /usr/src/app/package.json
-
-
-FROM jrottenberg/ffmpeg:4.4.1-alpine313
-
-# Create user and change workdir
-RUN adduser --disabled-password --home /home/ffmpgapi ffmpgapi
-WORKDIR /home/ffmpgapi
-
-# Copy files from build stage
-COPY --from=build /usr/src/app/ffmpegapi .
-COPY --from=build /usr/src/app/index.md .
-RUN chown ffmpgapi:ffmpgapi * && chmod 755 ffmpegapi
-
-EXPOSE 3000
-
-# Change user
-USER ffmpgapi
-
-ENTRYPOINT []
-CMD [ "./ffmpegapi" ]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--timeout-keep-alive", "600"]
 
